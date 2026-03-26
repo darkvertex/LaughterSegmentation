@@ -1,0 +1,54 @@
+[project]
+name = "laughter-segmentation"
+version = "0.1.0"
+description = "Laughter event segmentation from audio"
+requires-python = ">=3.11"
+dependencies = [
+    "librosa>=0.10.1",
+    "numpy>=1.26.3",
+    "pydub>=0.25.1",
+    "safetensors>=0.4.1",
+    "scipy>=1.10.0",
+    "soundfile>=0.12.1",
+    "torch>=2.1.2",
+    "torchaudio>=2.1.2",
+    "torchvision>=0.16.2",
+    "transformers>=4.36.1",
+]
+
+[project.optional-dependencies]
+train = [
+    "accelerate>=0.25.0",
+    "audiomentations>=0.32.0",
+    "datasets>=2.15.0",
+    "evaluate>=0.4.0",
+    "GitPython>=3.1.31",
+    "pedalboard>=0.8.6",
+    "tensorboard>=2.12.0",
+    "torch-audiomentations>=0.11.0",
+    "torch-pitch-shift>=1.2.4",
+]
+eval = [
+    "audioread>=3.0.0",
+    "confidence-intervals>=0.0.3",
+    "scikit-learn>=1.4.0",
+]
+
+# ── uv configuration ──────────────────────────────────────────────────────────
+
+[tool.uv]
+package = false
+# Route PyTorch packages through the CUDA 12.1 wheel index.
+# Override on CPU-only machines:
+#   uv sync --extra-index-url https://download.pytorch.org/whl/cpu
+index-strategy = "unsafe-first-match"
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
