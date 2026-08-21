@@ -13,7 +13,7 @@ import torch
 from transformers.trainer_utils import set_seed
 
 import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/train')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/train/')
 from evaluation._utils.utils import concat_close, remove_short
 from train.model import Model
 
@@ -60,12 +60,12 @@ def bandpass(x, samplerate, fp=np.array([1000,3000]), fs=np.array([1000,3000]), 
 def custom_amplituder_small_portion(array, sr, mul_fac=5):
     # 32767 is max value of signed short
     dub_audio = AudioSegment(
-                (array*32767).astype("int16").tobytes(), 
-                sample_width=2, 
-                frame_rate=sr, 
+                (array*32767).astype("int16").tobytes(),
+                sample_width=2,
+                frame_rate=sr,
                 channels=1,
                 )
-    
+
     dub_audio = dub_audio.set_frame_rate(sr)
     silent_section = detect_silence(dub_audio, min_silence_len=270, silence_thresh=-35)
 
@@ -104,9 +104,9 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
     # state_dict = torch.load(model_path) # use when model is .bin format
     model.load_state_dict(state_dict)
 
-    if not os.path.exists(output_dir):    
+    if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
+
     model.eval()
     with torch.no_grad():
         basename = osp.splitext(osp.basename(audio_path))[0]
@@ -119,7 +119,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
 
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
-        # get each array of 7 sec 
+        # get each array of 7 sec
         for array_idx in range(0, len(audio_array), int(sr*(input_sec-over_lap_sec))*batch_size):
             batched_arrays = []
             should_break = False
@@ -137,7 +137,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
             outputs = model(input_values=input_values)
 
             logits = outputs[1]
-        
+
             #  --- predict ends ---
 
             preds = torch.sigmoid(logits.to(torch.float32))
@@ -158,7 +158,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                         if status == "not_laughing":
                             start_idx = idx
                             status = "laughing"
-                        
+
                         # if the last frame is laughing
                         if status == "laughing" and idx == frame_count-1:
                             laughter[str(laughter_idx)] = {
@@ -186,7 +186,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                             laughter_idx += 1
                             start_idx = None
                             end_idx = None
-        
+
         if over_lap_sec > .0:
             laughter = merge_events([laughter])
 
@@ -201,5 +201,8 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, default="./output")
     parser.add_argument('--model_path', type=str, default="./models/model.safetensors")
     args = parser.parse_args()
-    
+
     main(args.audio_path, args.output_dir, args.model_path)
+
+# .\.venv\Scripts\python .\inference.py --model_path=.\models\model.safetensors --output_dir=.\output --audio_path "bordel.wav"
+# then open in https://omine-me.github.io/AudioDatasetChecker/compare.html
