@@ -76,8 +76,9 @@ else
   echo "==> Trained model already cached"
 fi
 # inference.py defaults to ./models/model.safetensors; link the cached copy in.
-mkdir -p "$REPO_DIR/models"
-ln -sf "$MODEL_CACHE_PATH" "$REPO_DIR/models/model.safetensors"
+# The same script also runs as the `start` step, since /workspace is re-checked
+# out on each boot (removing this untracked link) and install does not re-run.
+bash "$REPO_DIR/.cursor/link_model.sh"
 
 # --- Pre-cache the base wav2vec2 model so inference runs without network ---
 echo "==> Pre-caching base audio model ($BASE_AUDIO_MODEL)"
