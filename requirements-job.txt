@@ -1,0 +1,13 @@
+# Slim deps for the Cloud Run Job image.
+# torch / torchaudio come from the pytorch CUDA base image — do not pin them here.
+transformers==4.36.1
+safetensors==0.4.1
+huggingface-hub==0.19.4
+tokenizers==0.15.0
+librosa==0.10.1
+pydub==0.25.1
+soundfile==0.12.1
+scipy==1.10.0
+numpy==1.26.3
+google-cloud-storage==2.14.0
+setuptools<81
