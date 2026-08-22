@@ -153,10 +153,17 @@ def segment_laughter(
     sr=SAMPLE_RATE,
 ):
     """Run laughter segmentation and return a dict of {idx: {start_sec, end_sec}}."""
+    input_sec = float(input_sec)
+    overlap_sec = float(overlap_sec)
+    batch_size = int(batch_size)
+    sr = int(sr)
     if input_sec <= overlap_sec:
         raise ValueError(f"input_sec ({input_sec}) must be greater than overlap_sec ({overlap_sec})")
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
+
+    window_samples = int(sr * input_sec)
+    hop_samples = int(sr * (input_sec - overlap_sec))
 
     laughter = {}
     laughter_idx = 0
@@ -166,14 +173,15 @@ def segment_laughter(
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
         # get each array of input_sec
-        for array_idx in range(0, len(audio_array), int(sr*(input_sec-overlap_sec))*batch_size):
+        for array_idx in range(0, len(audio_array), hop_samples * batch_size):
             batched_arrays = []
             should_break = False
             for batch_idx in range(batch_size):
-                array = audio_array[array_idx+batch_idx*int(sr*(input_sec-overlap_sec)): array_idx+batch_idx*int(sr*(input_sec-overlap_sec))+sr*input_sec]
-                if len(array) < sr*input_sec:
+                start = array_idx + batch_idx * hop_samples
+                array = audio_array[start: start + window_samples]
+                if len(array) < window_samples:
                     # fill 0 to the end of array
-                    array = np.append(array, np.zeros(sr*input_sec-len(array)))
+                    array = np.append(array, np.zeros(window_samples - len(array)))
                     should_break = True
                 batched_arrays.append(array)
                 if should_break:
@@ -194,7 +202,7 @@ def segment_laughter(
                 # change to 0, 1
                 frame_pred = (np.array(frame_pred)>=0.5).astype(int)
 
-                batch_start_sec = (array_idx+batch_idx*int(sr*(input_sec-overlap_sec)))/float(sr)
+                batch_start_sec = (array_idx + batch_idx * hop_samples) / float(sr)
                 frame_count = len(frame_pred)
                 start_idx = None
                 end_idx = None

@@ -119,7 +119,7 @@ class InferenceSmokeTest(unittest.TestCase):
             laughter = segment_laughter(
                 self.model,
                 wav_path,
-                input_sec=3.0,
+                input_sec=7.0,
                 batch_size=1,
             )
         self.assertIsInstance(laughter, dict)
