@@ -9,6 +9,9 @@
 *.h5
 *.xls
 *.ini
+*.safetensors
+output/
+.cog/
 
 # ignore .txt except requirements.txt
 

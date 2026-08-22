@@ -1,20 +1,38 @@
-# The .dockerignore file excludes files from the container build process.
-#
-# https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# Keep the Cog image small. Checkpoint weights are downloaded in Predictor.setup().
 
-# Exclude Git files
+.git
+.github
+.cursor
 **/.git
 **/.github
 **/.gitignore
+**/.dockerignore
 
-# Exclude Python tooling
+# Python tooling / caches
 .python-version
-
-# Exclude Python cache files
-__pycache__
+**/__pycache__
+**/*.pyc
 .mypy_cache
 .pytest_cache
 .ruff_cache
-
-# Exclude Python virtual environment
+.venv
+venv
 /venv
+.env
+.env.local
+
+# Local artifacts (the 1.26GB checkpoint is fetched at runtime)
+models/*.safetensors
+output/
+.cog/
+
+# Not needed for inference
+evaluation/cache
+evaluation/datasets
+evaluation/models
+train/data
+train/datasets_list
+tests
+workflows
+uv.lock
+*.md

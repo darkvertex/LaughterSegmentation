@@ -33,24 +33,24 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
 5. Result will be saved in output directory in json format. To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
 
 ## Replicate (Cog)
-This repository includes a Cog wrapper for deploying on Replicate.
+This repository includes a Cog wrapper for deploying on Replicate. The predictor downloads `model.safetensors` from [Hugging Face](https://huggingface.co/omine-me/LaughterSegmentation) on first boot if it is not already present (or if `MODEL_PATH` is unset).
 
-1. Make sure `models/model.safetensors` exists (same as local usage).
-2. Install Cog CLI: https://cog.run/getting-started/
-3. Build and test locally:
+1. Install Cog CLI: https://cog.run/getting-started/
+2. Build and test locally (GPU recommended; CPU works but is slow):
   ```Batchfile
   cog build
   cog predict -i audio=@./your_audio.wav
   ```
-4. Push to Replicate (after `replicate login`):
+3. Push to Replicate (after `cog login`):
   ```Batchfile
-  cog push r8.im/<your-username>/laughter-segmentation
+  cog push
   ```
+  The destination defaults to `image` in `cog.yaml` (`r8.im/darkvertex/laughter-segmentation`). Override with `cog push r8.im/<your-username>/laughter-segmentation` if needed. You can also run the **Push to Replicate** GitHub Action after setting `REPLICATE_CLI_AUTH_TOKEN`.
 
 Inputs exposed by the predictor:
 - `audio`: input audio file.
-- `input_sec` (default `7.0`): inference window size in seconds.
-- `batch_size` (default `10`): number of windows per forward pass.
+- `input_sec` (default `7.0`): inference window size in seconds (`2.1`–`30.0`).
+- `batch_size` (default `10`): number of windows per forward pass (`1`–`64`).
 
 Output:
 - A JSON file containing laughter segments with `start_sec` and `end_sec`.

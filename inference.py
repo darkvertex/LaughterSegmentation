@@ -2,9 +2,11 @@ import argparse
 import json
 import os
 import os.path as osp
+import sys
 
 import librosa
 import numpy as np
+from huggingface_hub import hf_hub_download
 from pydub import AudioSegment
 from pydub.silence import detect_silence
 import safetensors
@@ -12,10 +14,22 @@ from scipy import signal
 import torch
 from transformers.trainer_utils import set_seed
 
-import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/train')
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+sys.path.append(os.path.join(ROOT_DIR, "train"))
 from evaluation._utils.utils import concat_close, remove_short
 from train.model import Model
+
+AUDIO_MODEL_NAME = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
+SAMPLE_RATE = 16000
+OVERLAP_SEC = 2.0
+DEFAULT_MODEL_PATH = "./models/model.safetensors"
+DEFAULT_OUTPUT_DIR = "./output"
+SEED = 42
+WEIGHTS_REPO = "omine-me/LaughterSegmentation"
+WEIGHTS_FILENAME = "model.safetensors"
+
 
 def merge_events(event_lists):
     merged_events = {}
@@ -82,49 +96,81 @@ def custom_amplituder_small_portion(array, sr, mul_fac=5):
     array = librosa.util.normalize(array)
     return array
 
-def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
-    audio_model_name = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
 
-    sr = 16000
-    seed = 42
+def get_device():
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def ensure_model_weights(model_path):
+    """Use a local checkpoint when present; otherwise download from Hugging Face."""
+    if os.path.isfile(model_path) and os.path.getsize(model_path) > 0:
+        return model_path
+
+    dest_dir = os.path.dirname(os.path.abspath(model_path)) or "."
+    os.makedirs(dest_dir, exist_ok=True)
+    download_kwargs = {
+        "repo_id": WEIGHTS_REPO,
+        "filename": WEIGHTS_FILENAME,
+        "local_dir": dest_dir,
+    }
+    try:
+        downloaded = hf_hub_download(local_dir_use_symlinks=False, **download_kwargs)
+    except TypeError:
+        downloaded = hf_hub_download(**download_kwargs)
+    if os.path.abspath(downloaded) != os.path.abspath(model_path):
+        os.replace(downloaded, model_path)
+    return model_path
+
+
+def load_model(model_path, device=None, audio_model_name=AUDIO_MODEL_NAME, sr=SAMPLE_RATE, seed=SEED):
+    """Load the laughter segmentation model once and return it in eval mode."""
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     set_seed(seed)
 
-    over_lap_sec = 2.
-    assert input_sec > over_lap_sec
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    model = Model(audio_model_name, device, sr).to(device)
+    if device is None:
+        device = get_device()
 
     if not osp.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
-    state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
-    # state_dict = torch.load(model_path) # use when model is .bin format
+        raise FileNotFoundError(
+            f"Model file not found: {model_path}. Download the model file and place it in the specified path."
+        )
+
+    model = Model(audio_model_name, device, sr).to(device)
+    map_location = device.index if device.type == "cuda" else "cpu"
+    state_dict = safetensors.torch.load_file(model_path, map_location)
     model.load_state_dict(state_dict)
-
-    if not os.path.exists(output_dir):    
-        os.makedirs(output_dir)
-    
     model.eval()
+    return model
+
+
+def segment_laughter(
+    model,
+    audio_path,
+    input_sec=7,
+    batch_size=10,
+    overlap_sec=OVERLAP_SEC,
+    sr=SAMPLE_RATE,
+):
+    """Run laughter segmentation and return a dict of {idx: {start_sec, end_sec}}."""
+    if input_sec <= overlap_sec:
+        raise ValueError(f"input_sec ({input_sec}) must be greater than overlap_sec ({overlap_sec})")
+    if batch_size < 1:
+        raise ValueError("batch_size must be >= 1")
+
+    laughter = {}
+    laughter_idx = 0
+
     with torch.no_grad():
-        basename = osp.splitext(osp.basename(audio_path))[0]
-        out_file = osp.join(output_dir, basename+".json")
-
-        laughter = {}
-        laughter_idx = 0
-
         audio_array = librosa.load(audio_path, sr=sr, mono=True)[0]
-
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
-        # get each array of 7 sec 
-        for array_idx in range(0, len(audio_array), int(sr*(input_sec-over_lap_sec))*batch_size):
+        # get each array of input_sec
+        for array_idx in range(0, len(audio_array), int(sr*(input_sec-overlap_sec))*batch_size):
             batched_arrays = []
             should_break = False
             for batch_idx in range(batch_size):
-                array = audio_array[array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)): array_idx+batch_idx*int(sr*(input_sec-over_lap_sec))+sr*input_sec]
+                array = audio_array[array_idx+batch_idx*int(sr*(input_sec-overlap_sec)): array_idx+batch_idx*int(sr*(input_sec-overlap_sec))+sr*input_sec]
                 if len(array) < sr*input_sec:
                     # fill 0 to the end of array
                     array = np.append(array, np.zeros(sr*input_sec-len(array)))
@@ -137,7 +183,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
             outputs = model(input_values=input_values)
 
             logits = outputs[1]
-        
+
             #  --- predict ends ---
 
             preds = torch.sigmoid(logits.to(torch.float32))
@@ -148,7 +194,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                 # change to 0, 1
                 frame_pred = (np.array(frame_pred)>=0.5).astype(int)
 
-                batch_start_sec = (array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)))/float(sr)
+                batch_start_sec = (array_idx+batch_idx*int(sr*(input_sec-overlap_sec)))/float(sr)
                 frame_count = len(frame_pred)
                 start_idx = None
                 end_idx = None
@@ -158,7 +204,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                         if status == "not_laughing":
                             start_idx = idx
                             status = "laughing"
-                        
+
                         # if the last frame is laughing
                         if status == "laughing" and idx == frame_count-1:
                             laughter[str(laughter_idx)] = {
@@ -186,20 +232,42 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                             laughter_idx += 1
                             start_idx = None
                             end_idx = None
-        
-        if over_lap_sec > .0:
-            laughter = merge_events([laughter])
 
-        with open(out_file, mode='w', encoding="utf-8") as f:
-            laughter = concat_close(laughter, 0.2)
-            laughter = remove_short(laughter, 0.2)
-            json.dump(laughter, f)
+    if overlap_sec > .0:
+        laughter = merge_events([laughter])
+
+    laughter = concat_close(laughter, 0.2)
+    laughter = remove_short(laughter, 0.2)
+    return laughter
+
+
+def write_segments(laughter, output_path):
+    output_dir = osp.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    with open(output_path, mode="w", encoding="utf-8") as f:
+        json.dump(laughter, f)
+    return output_path
+
+
+def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
+    model = load_model(model_path)
+    laughter = segment_laughter(
+        model,
+        audio_path,
+        input_sec=input_sec,
+        batch_size=batch_size,
+    )
+    basename = osp.splitext(osp.basename(audio_path))[0]
+    out_file = osp.join(output_dir, basename + ".json")
+    write_segments(laughter, out_file)
+    return out_file
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--audio_path', type=str, required=True)
-    parser.add_argument('--output_dir', type=str, default="./output")
-    parser.add_argument('--model_path', type=str, default="./models/model.safetensors")
+    parser.add_argument('--output_dir', type=str, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument('--model_path', type=str, default=DEFAULT_MODEL_PATH)
     args = parser.parse_args()
     
     main(args.audio_path, args.output_dir, args.model_path)
