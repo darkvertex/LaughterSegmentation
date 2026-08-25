@@ -34,6 +34,19 @@ eval = [
     "scikit-learn>=1.4.0",
 ]
 
+# Cog image tasks — run with: uvx --from poethepoet poe cog-deploy
+[tool.poe.tasks.cog-build]
+help = "Build the Cog Docker image"
+cmd = "cog build"
+
+[tool.poe.tasks.cog-push]
+help = "Push the Cog image to Replicate"
+cmd = "cog push"
+
+[tool.poe.tasks.cog-deploy]
+help = "Build the Cog image, then push it to Replicate"
+sequence = ["cog-build", "cog-push"]
+
 # ── uv configuration ──────────────────────────────────────────────────────────
 
 [tool.uv]
