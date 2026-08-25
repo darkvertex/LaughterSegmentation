@@ -21,7 +21,7 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from evaluation._utils.utils import concat_close, remove_short
+from evaluation._utils.utils import annotate_loudness, concat_close, remove_short
 from train.model import Model
 
 def merge_events(event_lists):
@@ -130,6 +130,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
         laughter_idx = 0
 
         audio_array = librosa.load(audio_path, sr=sr, mono=True)[0]
+        original_audio = audio_array.copy()
 
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
@@ -208,6 +209,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
         with open(out_file, mode='w', encoding="utf-8") as f:
             laughter = concat_close(laughter, 0.2)
             laughter = remove_short(laughter, 0.2)
+            laughter = annotate_loudness(laughter, original_audio, sr)
             json.dump(laughter, f)
 
 if __name__ == '__main__':

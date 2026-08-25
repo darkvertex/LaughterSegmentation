@@ -53,7 +53,7 @@ Inputs exposed by the predictor:
 - `batch_size` (default `10`): number of windows per forward pass.
 
 Output:
-- A JSON file containing laughter segments with `start_sec` and `end_sec`.
+- A JSON file containing laughter segments with `start_sec`, `end_sec`, and loudness fields (`rms_db`, `peak_db`, `crest_db`, `rel_rms_db` in dBFS on the original audio).
 
 ## Training
 Read [README](/train/README.md) in train directory.
