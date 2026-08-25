@@ -3,7 +3,6 @@ build:
   python_version: "3.11"
   system_packages:
     - ffmpeg
-  python_packages:
-    - -r replicate-requirements.txt
+  python_requirements: replicate-requirements.txt
 
 predict: "predict.py:Predictor"

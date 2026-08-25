@@ -1,9 +1,9 @@
 import json
 import os
 import shutil
-from pathlib import Path
+from pathlib import Path as LocalPath
 
-from cog import BasePredictor, Input, Path as CogPath
+from cog import BasePredictor, Input, Path
 
 from inference import main as run_inference
 
@@ -16,14 +16,14 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        audio: CogPath = Input(description="Input audio file (wav/mp3/opus, etc.)"),
+        audio: Path = Input(description="Input audio file (wav/mp3/opus, etc.)"),
         input_sec: float = Input(
             description="Window length in seconds used for inference", default=7.0, ge=2.1, le=30.0
         ),
         batch_size: int = Input(
             description="Number of windows per forward pass", default=10, ge=1, le=64
         ),
-    ) -> CogPath:
+    ) -> Path:
         """Run laughter segmentation and return a JSON file with time segments."""
         if not os.path.exists(self.default_model_path):
             raise FileNotFoundError(
@@ -34,8 +34,8 @@ class Predictor(BasePredictor):
         os.makedirs(self.default_output_dir, exist_ok=True)
 
         # Copy input to a local tmp path with stable naming.
-        input_path = Path("/tmp/input_audio")
-        suffix = Path(str(audio)).suffix or ".wav"
+        input_path = LocalPath("/tmp/input_audio")
+        suffix = LocalPath(str(audio)).suffix or ".wav"
         input_path = input_path.with_suffix(suffix)
         shutil.copy(str(audio), str(input_path))
 
@@ -47,7 +47,7 @@ class Predictor(BasePredictor):
             batch_size=int(batch_size),
         )
 
-        output_json = Path(self.default_output_dir) / f"{input_path.stem}.json"
+        output_json = LocalPath(self.default_output_dir) / f"{input_path.stem}.json"
         if not output_json.exists():
             raise RuntimeError("Inference completed but output JSON was not created.")
 
@@ -55,4 +55,4 @@ class Predictor(BasePredictor):
         with output_json.open("r", encoding="utf-8") as f:
             json.load(f)
 
-        return CogPath(str(output_json))
+        return Path(str(output_json))
