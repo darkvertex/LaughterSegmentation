@@ -101,6 +101,12 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
     over_lap_sec = 2.
     assert input_sec > over_lap_sec
 
+    # Sample counts must be ints. Cog/Replicate pass input_sec as a float (e.g. 7.0),
+    # and using `sr * input_sec` directly as a slice index raises TypeError.
+    window_samples = int(sr * input_sec)
+    hop_samples = int(sr * (input_sec - over_lap_sec))
+    step_samples = hop_samples * int(batch_size)
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if model is None:
@@ -127,15 +133,16 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
 
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
-        # get each array of 7 sec
-        for array_idx in range(0, len(audio_array), int(sr*(input_sec-over_lap_sec))*batch_size):
+        # get each array of input_sec 
+        for array_idx in range(0, len(audio_array), step_samples):
             batched_arrays = []
             should_break = False
-            for batch_idx in range(batch_size):
-                array = audio_array[array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)): array_idx+batch_idx*int(sr*(input_sec-over_lap_sec))+sr*input_sec]
-                if len(array) < sr*input_sec:
+            for batch_idx in range(int(batch_size)):
+                start = array_idx + batch_idx * hop_samples
+                array = audio_array[start: start + window_samples]
+                if len(array) < window_samples:
                     # fill 0 to the end of array
-                    array = np.append(array, np.zeros(sr*input_sec-len(array)))
+                    array = np.append(array, np.zeros(window_samples - len(array)))
                     should_break = True
                 batched_arrays.append(array)
                 if should_break:
@@ -156,7 +163,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
                 # change to 0, 1
                 frame_pred = (np.array(frame_pred)>=0.5).astype(int)
 
-                batch_start_sec = (array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)))/float(sr)
+                batch_start_sec = (array_idx + batch_idx * hop_samples) / float(sr)
                 frame_count = len(frame_pred)
                 start_idx = None
                 end_idx = None
