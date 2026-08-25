@@ -1,3 +1,5 @@
+image: r8.im/darkvertex/laughtersegmentation
+
 build:
   gpu: true
   python_version: "3.11"
