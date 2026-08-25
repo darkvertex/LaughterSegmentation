@@ -89,7 +89,7 @@ def custom_amplituder_small_portion(array, sr, mul_fac=5):
     array = librosa.util.normalize(array)
     return array
 
-def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
+def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=None):
     audio_model_name = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
 
     sr = 16000
@@ -103,13 +103,14 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model = Model(audio_model_name, device, sr).to(device)
+    if model is None:
+        model = Model(audio_model_name, device, sr).to(device)
 
-    if not osp.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
-    state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
-    # state_dict = torch.load(model_path) # use when model is .bin format
-    model.load_state_dict(state_dict)
+        if not osp.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
+        state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
+        # state_dict = torch.load(model_path) # use when model is .bin format
+        model.load_state_dict(state_dict)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
