@@ -13,7 +13,14 @@ import torch
 from transformers.trainer_utils import set_seed
 
 import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/train/')
+
+# Put the repo root on sys.path so `train` and `evaluation` import as packages.
+# Do not add `train/` itself: that makes `train/train.py` shadow the package
+# (`ModuleNotFoundError: 'train' is not a package`).
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 from evaluation._utils.utils import concat_close, remove_short
 from train.model import Model
 
