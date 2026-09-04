@@ -30,12 +30,11 @@ jobs:
           docker-images: false
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Cog
-        uses: replicate/setup-cog@v2
+        uses: ./.github/actions/setup-cog
         with:
-          token: ""
           cog-version: ${{ env.COG_VERSION }}
 
       - name: cog build
