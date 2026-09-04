@@ -21,6 +21,7 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from applause.detect import build_timed_ranges_result, detect_applause
 from evaluation._utils.utils import annotate_loudness, concat_close, remove_short
 from train.model import Model
 
@@ -211,7 +212,8 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
             laughter = concat_close(laughter, 0.2)
             laughter = remove_short(laughter, 0.2)
             laughter = annotate_loudness(laughter, original_audio, sr)
-            json.dump(laughter, f)
+            applause = detect_applause(original_audio, sr)
+            json.dump(build_timed_ranges_result(laughter, applause), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

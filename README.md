@@ -6,6 +6,53 @@ You can extract a exact segment of laughter from various talking audio using tra
 Code, annotations, and model are described in the following paper:
 [Taisei Omine, Kenta Akita, and Reiji Tsuruno, "Robust Laughter Segmentation with Automatic Diverse Data Synthesis", Interspeech 2024.](https://doi.org/10.21437/Interspeech.2024-1644)
 
+## What's special about this fork
+
+This fork of [omine-me/LaughterSegmentation](https://github.com/omine-me/LaughterSegmentation) keeps the original laughter segmenter and adds audience-event extras used in comedy-show post-production.
+
+**Applause detection.** In addition to laughter ranges, inference runs a NumPy port of the [AMP applause-detection](https://github.com/AudiovisualMetadataPlatform/applause-detection) binary MLP (`pretrained/applause-binary-20210203`). Weights are `models/applause_mlp.npz` (regenerate with `scripts/export_applause_weights.py`). TensorFlow is not a runtime dependency. Applause segments use the same timed-range shape as laughter.
+
+**Sound level peaks.** Each laughter and applause event is annotated on the original audio (dBFS) with RMS, peak, crest (`peak_db - rms_db`), and RMS relative to the whole file. Downstream tools can bucket intensity (for example chuckle vs riot) from these fields; this repo does not assign those labels.
+
+**Hosted Replicate model.** A Cog image is published at [replicate.com/darkvertex/laughtersegmentation](https://replicate.com/darkvertex/laughtersegmentation). Local `cog predict` and that hosted model return the same JSON file.
+
+**JSON output on success.** The result is one object with `laughter` and `applause` maps. Keys are string indices in time order (`"0"`, `"1"`, …). A kind with no detections is `{}`. Each segment looks like:
+
+```json
+{
+  "laughter": {
+    "0": {
+      "start_sec": 12.41,
+      "end_sec": 14.08,
+      "rms_db": -21.4,
+      "peak_db": -9.1,
+      "crest_db": 12.3,
+      "rel_rms_db": -4.0
+    }
+  },
+  "applause": {
+    "0": {
+      "start_sec": 103.2,
+      "end_sec": 108.7,
+      "rms_db": -18.0,
+      "peak_db": -2.3,
+      "crest_db": 15.7,
+      "rel_rms_db": 0.7
+    }
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `start_sec` / `end_sec` | Event bounds in seconds |
+| `rms_db` | Segment RMS loudness (dBFS) |
+| `peak_db` | Segment peak amplitude (dBFS) |
+| `crest_db` | `peak_db - rms_db` |
+| `rel_rms_db` | Segment RMS minus whole-file RMS |
+
+Silent or empty slices floor at `-80.0` dB.
+
 ## Installation
 ```Batchfile
 git clone https://github.com/omine-me/LaughterSegmentation.git
@@ -30,26 +77,58 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
     python -m pip install soundfile
     ```
 4. If you want to change output directory, use  `--output_dir` option. If you want to use your own model, use `--model_path` option.
-5. Result will be saved in output directory in json format. To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
+5. Result will be saved in output directory in json format (`laughter` and `applause` timed ranges). To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
 
 ## Replicate (Cog)
-This repository includes a Cog wrapper for deploying on Replicate.
+This repository includes a Cog wrapper. The image currently published from this fork is [r8.im/darkvertex/laughtersegmentation](https://replicate.com/darkvertex/laughtersegmentation).
 
-The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) into the image via the `build.run` steps in `cog.yaml`, so no weights need to be present locally and cold boots on Replicate do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
+The image build downloads `model.safetensors` (and the base wav2vec2 `config.json`) via the `build.run` steps in `cog.yaml`, so cold boots do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
 
-1. Install Cog CLI: https://cog.run/getting-started/
-2. Build and test locally:
-  ```Batchfile
-  cog build
-  cog predict -i audio=@./your_audio.wav
-  ```
-3. Push to Replicate (after `replicate login`):
-  ```Batchfile
-  cog push r8.im/<your-username>/laughter-segmentation
-  ```
+Install the [Cog CLI](https://cog.run/getting-started/) and Docker. An NVIDIA GPU is recommended. Without a driver, Cog logs `Missing device driver, re-trying without GPU` and runs on CPU (much slower). The first pull or build is around 10 GB.
+
+### Run an estimate locally
+
+You do not need a Python venv or `model.safetensors` on disk. `cog predict` writes a JSON file (`-o`); omit `-o` to print the path Cog stored.
+
+**Published image** (no local `cog build`):
+
+```
+cog predict r8.im/darkvertex/laughtersegmentation -i audio=@./your_audio.wav -o ./laughter-applause.json
+```
+
+**Build from this checkout**, then predict with the image named in `cog.yaml`:
+
+```
+cog build
+cog predict -i audio=@./your_audio.wav -o ./laughter-applause.json
+```
+
+Optional inputs (same names as the Replicate API):
+
+```
+cog predict r8.im/darkvertex/laughtersegmentation -i audio=@./your_audio.wav -i input_sec=7 -i batch_size=10 -o ./laughter-applause.json
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `audio` | (required) | wav / mp3 / opus / etc. Prefix local files with `@`. |
+| `input_sec` | `7.0` | Sliding window length in seconds (`2.1`–`30`). |
+| `batch_size` | `10` | Windows per forward pass (`1`–`64`). |
+
+The JSON matches [What's special about this fork](#whats-special-about-this-fork).
+
+### Push your own build
+
+After `replicate login` (CLI auth token from https://replicate.com/auth/token, not an `r8_…` API token):
+
+```
+cog push r8.im/darkvertex/laughtersegmentation
+```
+
+Or another destination: `cog push r8.im/<your-username>/laughter-segmentation`.
 
 ### GitHub Actions
-- `.github/workflows/cog-build.yml` runs on every pull request: `cog build`, then a CPU `cog predict` smoke test against the built image. Nothing is pushed.
+- `.github/workflows/cog-build.yml` runs on every pull request: `pytest` and `cog build` + a CPU `cog predict` smoke test, in parallel. Nothing is pushed.
 - `.github/workflows/cog-release.yml` runs on every push to `main` (or manually): `cog build` then `cog push`. It runs in the `production` GitHub Environment and needs the secret `REPLICATE_CLI_AUTH_TOKEN` defined there (Settings > Environments > production). The value must be the CLI auth token copied from https://replicate.com/auth/token, not an API token (`r8_...`) from the account settings page: `cog login` rejects API tokens. The job fails early with a clear message if the secret is missing or is an API token.
 
 Inputs exposed by the predictor:
@@ -57,8 +136,7 @@ Inputs exposed by the predictor:
 - `input_sec` (default `7.0`): inference window size in seconds.
 - `batch_size` (default `10`): number of windows per forward pass.
 
-Output:
-- A JSON file containing laughter segments with `start_sec`, `end_sec`, and loudness fields (`rms_db`, `peak_db`, `crest_db`, `rel_rms_db` in dBFS on the original audio).
+Output: a JSON file in the format documented under [What's special about this fork](#whats-special-about-this-fork).
 
 ## Training
 Read [README](/train/README.md) in train directory.

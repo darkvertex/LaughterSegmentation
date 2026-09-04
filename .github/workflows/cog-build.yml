@@ -1,8 +1,8 @@
-name: Cog build (validate)
+name: CI
 
-# Builds the Cog image exactly as the release workflow does, then runs one
-# CPU prediction against it to prove setup() works with the baked-in weights.
-# Nothing is pushed.
+# Pull requests run pytest and a Cog image smoke test in parallel.
+# The Cog job builds the image exactly as release does, then runs one CPU
+# prediction to prove setup() works with the baked-in weights. Nothing is pushed.
 
 on:
   pull_request:
@@ -71,7 +71,38 @@ jobs:
           with open("/tmp/output.json") as f:
               result = json.load(f)
           assert isinstance(result, dict), f"expected a JSON object, got {type(result).__name__}"
-          for seg in result.values():
-              assert {"start_sec", "end_sec"} <= seg.keys(), seg
-          print(f"OK: valid output with {len(result)} segment(s)")
+          assert set(result.keys()) == {"laughter", "applause"}, result.keys()
+          required = {"start_sec", "end_sec"}
+          total = 0
+          for kind in ("laughter", "applause"):
+              segments = result[kind]
+              assert isinstance(segments, dict), f"{kind} should be an object, got {type(segments).__name__}"
+              for key, seg in segments.items():
+                  assert isinstance(seg, dict), {kind: key, "seg": seg}
+                  assert required <= seg.keys(), {kind: key, "seg": seg}
+                  total += 1
+          print(f"OK: valid output with {total} segment(s) across laughter and applause")
           EOF
+
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Tests import applause + evaluation helpers only; skip torch/transformers.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8.0.0" "numpy>=1.26.3" "librosa>=0.10.1" "scipy>=1.10.0" "soundfile>=0.12.1"
+
+      - name: pytest
+        run: python -m pytest -q

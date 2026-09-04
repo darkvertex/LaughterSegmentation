@@ -66,7 +66,7 @@ class Predictor(BasePredictor):
             description="Number of windows per forward pass", default=10, ge=1, le=64
         ),
     ) -> Path:
-        """Run laughter segmentation and return a JSON file with time segments."""
+        """Run laughter and applause segmentation; return JSON with both timed-range maps."""
         os.makedirs(self.default_output_dir, exist_ok=True)
 
         # Copy input to a local tmp path with stable naming.
