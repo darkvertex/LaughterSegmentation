@@ -50,7 +50,7 @@ The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) in
 
 ### GitHub Actions
 - `.github/workflows/cog-build.yml` runs on every pull request: `cog build`, then a CPU `cog predict` smoke test against the built image. Nothing is pushed.
-- `.github/workflows/cog-release.yml` runs on every push to `main` (or manually): `cog build` then `cog push`. It runs in the `production` GitHub Environment and needs the secret `REPLICATE_CLI_AUTH_TOKEN` defined there (Settings > Environments > production; create the token with `cog login` or at https://replicate.com/account/api-tokens). The job fails early with a clear message if it is missing.
+- `.github/workflows/cog-release.yml` runs on every push to `main` (or manually): `cog build` then `cog push`. It runs in the `production` GitHub Environment and needs the secret `REPLICATE_CLI_AUTH_TOKEN` defined there (Settings > Environments > production). The value must be the CLI auth token copied from https://replicate.com/auth/token, not an API token (`r8_...`) from the account settings page: `cog login` rejects API tokens. The job fails early with a clear message if the secret is missing or is an API token.
 
 Inputs exposed by the predictor:
 - `audio`: input audio file.
