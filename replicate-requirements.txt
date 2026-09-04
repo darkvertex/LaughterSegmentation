@@ -7,5 +7,4 @@ scipy==1.10.0
 soundfile==0.12.1
 torch==2.1.2
 torchaudio==2.1.2
-torchvision==0.16.2
 transformers==4.36.1

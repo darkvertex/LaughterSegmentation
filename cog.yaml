@@ -6,5 +6,14 @@ build:
   system_packages:
     - ffmpeg
   python_requirements: replicate-requirements.txt
+  # Bake everything setup() needs into the image so cold boots do no network I/O.
+  # These run before `COPY . /src`, so the weights layer is cached independently
+  # of code changes. Paths must be absolute: WORKDIR is not /src at this point.
+  run:
+    - curl -fsSL -o /usr/local/bin/pget https://github.com/replicate/pget/releases/download/v0.8.2/pget_linux_x86_64 && chmod +x /usr/local/bin/pget
+    - mkdir -p /src/models && pget https://huggingface.co/omine-me/LaughterSegmentation/resolve/main/model.safetensors /src/models/model.safetensors
+    - test "$(stat -c%s /src/models/model.safetensors)" -gt 1200000000
+    # Only config.json is needed from the base repo; the fine-tuned checkpoint contains every weight.
+    - python -c "from transformers import AutoConfig; AutoConfig.from_pretrained('jonatasgrosman/wav2vec2-large-xlsr-53-english')"
 
 predict: "predict.py:Predictor"

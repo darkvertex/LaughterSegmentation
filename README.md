@@ -35,14 +35,15 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
 ## Replicate (Cog)
 This repository includes a Cog wrapper for deploying on Replicate.
 
-1. Make sure `models/model.safetensors` exists (same as local usage).
-2. Install Cog CLI: https://cog.run/getting-started/
-3. Build and test locally:
+The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) into the image via the `build.run` steps in `cog.yaml`, so no weights need to be present locally and cold boots on Replicate do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
+
+1. Install Cog CLI: https://cog.run/getting-started/
+2. Build and test locally:
   ```Batchfile
   cog build
   cog predict -i audio=@./your_audio.wav
   ```
-4. Push to Replicate (after `replicate login`):
+3. Push to Replicate (after `replicate login`):
   ```Batchfile
   cog push r8.im/<your-username>/laughter-segmentation
   ```
