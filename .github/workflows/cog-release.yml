@@ -69,11 +69,11 @@ jobs:
           docker-images: false
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      # Installs Docker buildx and Cog, and runs `cog login` with the token.
+      # Installs Docker Buildx and Cog, and runs `cog login` with the token.
       - name: Setup Cog
-        uses: replicate/setup-cog@v2
+        uses: ./.github/actions/setup-cog
         with:
           token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
           cog-version: ${{ env.COG_VERSION }}
