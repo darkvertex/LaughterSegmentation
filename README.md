@@ -30,7 +30,7 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
     python -m pip install soundfile
     ```
 4. If you want to change output directory, use  `--output_dir` option. If you want to use your own model, use `--model_path` option.
-5. Result will be saved in output directory in json format. To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
+5. Result will be saved in output directory in json format (`laughter` and `applause` timed ranges). To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
 
 ## Replicate (Cog)
 This repository includes a Cog wrapper for deploying on Replicate.
@@ -58,7 +58,9 @@ Inputs exposed by the predictor:
 - `batch_size` (default `10`): number of windows per forward pass.
 
 Output:
-- A JSON file containing laughter segments with `start_sec`, `end_sec`, and loudness fields (`rms_db`, `peak_db`, `crest_db`, `rel_rms_db` in dBFS on the original audio).
+- A JSON file with `laughter` and `applause` keys. Each key maps string indices (`"0"`, `"1"`, …) to segments with `start_sec`, `end_sec`, and loudness fields (`rms_db`, `peak_db`, `crest_db`, `rel_rms_db` in dBFS on the original audio). Empty detections are `{}` under that key.
+
+Applause ranges use a NumPy port of the [AMP applause-detection](https://github.com/AudiovisualMetadataPlatform/applause-detection) binary MLP (`pretrained/applause-binary-20210203`). Weights live at `models/applause_mlp.npz` (regenerate with `scripts/export_applause_weights.py`).
 
 ## Training
 Read [README](/train/README.md) in train directory.
