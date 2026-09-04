@@ -3,8 +3,12 @@ name: Release to Replicate
 # Builds the Cog image and pushes it to Replicate whenever main changes.
 #
 # Requires the secret REPLICATE_CLI_AUTH_TOKEN on the "production" GitHub
-# Environment (Settings > Environments > production). Create the token at
-# https://replicate.com/account/api-tokens
+# Environment (Settings > Environments > production). Copy the token from
+# https://replicate.com/auth/token (the same page `cog login` opens).
+#
+# This must be a CLI auth token, NOT an API token from
+# https://replicate.com/account/api-tokens: `cog login` rejects anything
+# starting with "r8_" and there is no other way to authenticate `cog push`.
 
 on:
   push:
@@ -45,9 +49,17 @@ jobs:
           REPLICATE_CLI_AUTH_TOKEN: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
         run: |
           if [ -z "$REPLICATE_CLI_AUTH_TOKEN" ]; then
-            echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is not available. Generate a token with 'cog login' or at https://replicate.com/account/api-tokens and add it to the 'production' GitHub Environment (Settings > Environments)."
+            echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is not available. Copy the CLI auth token from https://replicate.com/auth/token and add it to the 'production' GitHub Environment (Settings > Environments)."
             exit 1
           fi
+          # Fail here rather than after several minutes of disk cleanup: cog login
+          # refuses API tokens, which all start with "r8_".
+          case "$REPLICATE_CLI_AUTH_TOKEN" in
+            r8_*)
+              echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is a Replicate API token (r8_...), which 'cog login' does not accept. Replace it with the CLI auth token from https://replicate.com/auth/token."
+              exit 1
+              ;;
+          esac
 
       # The image is ~10 GB (CUDA base + torch + 1.26 GB weights); reclaim space first.
       - name: Free disk space
