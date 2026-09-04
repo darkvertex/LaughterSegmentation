@@ -3,8 +3,8 @@ name: Release to Replicate
 # Builds the Cog image and pushes it to Replicate whenever main changes.
 #
 # Requires the secret REPLICATE_CLI_AUTH_TOKEN on the "production" GitHub
-# Environment (Settings > Environments > production). Create the token with
-# `cog login` or at https://replicate.com/account/api-tokens.
+# Environment (Settings > Environments > production). Create the token at
+# https://replicate.com/account/api-tokens
 
 on:
   push:
