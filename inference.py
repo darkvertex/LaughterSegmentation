@@ -13,8 +13,15 @@ import torch
 from transformers.trainer_utils import set_seed
 
 import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/train/')
-from evaluation._utils.utils import concat_close, remove_short
+
+# Put the repo root on sys.path so `train` and `evaluation` import as packages.
+# Do not add `train/` itself: that makes `train/train.py` shadow the package
+# (`ModuleNotFoundError: 'train' is not a package`).
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from evaluation._utils.utils import annotate_loudness, concat_close, remove_short
 from train.model import Model
 
 def merge_events(event_lists):
@@ -82,7 +89,7 @@ def custom_amplituder_small_portion(array, sr, mul_fac=5):
     array = librosa.util.normalize(array)
     return array
 
-def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
+def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=None):
     audio_model_name = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
 
     sr = 16000
@@ -94,15 +101,22 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
     over_lap_sec = 2.
     assert input_sec > over_lap_sec
 
+    # Sample counts must be ints. Cog/Replicate pass input_sec as a float (e.g. 7.0),
+    # and using `sr * input_sec` directly as a slice index raises TypeError.
+    window_samples = int(sr * input_sec)
+    hop_samples = int(sr * (input_sec - over_lap_sec))
+    step_samples = hop_samples * int(batch_size)
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model = Model(audio_model_name, device, sr).to(device)
+    if model is None:
+        model = Model(audio_model_name, device, sr).to(device)
 
-    if not osp.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
-    state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
-    # state_dict = torch.load(model_path) # use when model is .bin format
-    model.load_state_dict(state_dict)
+        if not osp.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
+        state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
+        # state_dict = torch.load(model_path) # use when model is .bin format
+        model.load_state_dict(state_dict)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -116,18 +130,20 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
         laughter_idx = 0
 
         audio_array = librosa.load(audio_path, sr=sr, mono=True)[0]
+        original_audio = audio_array.copy()
 
         audio_array = custom_amplituder_small_portion(audio_array, sr)
 
-        # get each array of 7 sec
-        for array_idx in range(0, len(audio_array), int(sr*(input_sec-over_lap_sec))*batch_size):
+        # get each array of input_sec 
+        for array_idx in range(0, len(audio_array), step_samples):
             batched_arrays = []
             should_break = False
-            for batch_idx in range(batch_size):
-                array = audio_array[array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)): array_idx+batch_idx*int(sr*(input_sec-over_lap_sec))+sr*input_sec]
-                if len(array) < sr*input_sec:
+            for batch_idx in range(int(batch_size)):
+                start = array_idx + batch_idx * hop_samples
+                array = audio_array[start: start + window_samples]
+                if len(array) < window_samples:
                     # fill 0 to the end of array
-                    array = np.append(array, np.zeros(sr*input_sec-len(array)))
+                    array = np.append(array, np.zeros(window_samples - len(array)))
                     should_break = True
                 batched_arrays.append(array)
                 if should_break:
@@ -148,7 +164,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
                 # change to 0, 1
                 frame_pred = (np.array(frame_pred)>=0.5).astype(int)
 
-                batch_start_sec = (array_idx+batch_idx*int(sr*(input_sec-over_lap_sec)))/float(sr)
+                batch_start_sec = (array_idx + batch_idx * hop_samples) / float(sr)
                 frame_count = len(frame_pred)
                 start_idx = None
                 end_idx = None
@@ -193,6 +209,7 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10):
         with open(out_file, mode='w', encoding="utf-8") as f:
             laughter = concat_close(laughter, 0.2)
             laughter = remove_short(laughter, 0.2)
+            laughter = annotate_loudness(laughter, original_audio, sr)
             json.dump(laughter, f)
 
 if __name__ == '__main__':

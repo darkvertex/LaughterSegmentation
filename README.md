@@ -22,15 +22,38 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
 
 ## Usage
 1. Prepare audio file.
-1. Open Terminal and go to the directory where `inference.py` is located.
-1. Run `python inference.py --audio_path audio.wav`. You have to change *audio.wav* to your own audio path. You can use common audio format like `mp3`, `wav`, `opus`, etc. 16kHz wav audio is faster. If the audio fails to load, run the following command and also download FFmpeg and add it to the PATH.
+2. Open Terminal and go to the directory where `inference.py` is located.
+3. Run `python inference.py --audio_path audio.wav`. You have to change *audio.wav* to your own audio path. You can use common audio format like `mp3`, `wav`, `opus`, etc. 16kHz wav audio is faster. If the audio fails to load, run the following command and also download FFmpeg and add it to the PATH.
     ```Batchfile
     python -m pip uninstall pysoundfile
     python -m pip uninstall soundfile
     python -m pip install soundfile
     ```
-1. If you want to change output directory, use  `--output_dir` option. If you want to use your own model, use `--model_path` option.
-1. Result will be saved in output directory in json format. To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
+4. If you want to change output directory, use  `--output_dir` option. If you want to use your own model, use `--model_path` option.
+5. Result will be saved in output directory in json format. To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
+
+## Replicate (Cog)
+This repository includes a Cog wrapper for deploying on Replicate.
+
+1. Make sure `models/model.safetensors` exists (same as local usage).
+2. Install Cog CLI: https://cog.run/getting-started/
+3. Build and test locally:
+  ```Batchfile
+  cog build
+  cog predict -i audio=@./your_audio.wav
+  ```
+4. Push to Replicate (after `replicate login`):
+  ```Batchfile
+  cog push r8.im/<your-username>/laughter-segmentation
+  ```
+
+Inputs exposed by the predictor:
+- `audio`: input audio file.
+- `input_sec` (default `7.0`): inference window size in seconds.
+- `batch_size` (default `10`): number of windows per forward pass.
+
+Output:
+- A JSON file containing laughter segments with `start_sec`, `end_sec`, and loudness fields (`rms_db`, `peak_db`, `crest_db`, `rel_rms_db` in dBFS on the original audio).
 
 ## Training
 Read [README](/train/README.md) in train directory.
