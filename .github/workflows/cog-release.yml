@@ -1,0 +1,81 @@
+name: Release to Replicate
+
+# Builds the Cog image and pushes it to Replicate whenever main changes.
+#
+# Requires the secret REPLICATE_CLI_AUTH_TOKEN on the "production" GitHub
+# Environment (Settings > Environments > production). Create the token at
+# https://replicate.com/account/api-tokens
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".github/workflows/cog-build.yml"
+  workflow_dispatch:
+    inputs:
+      model_name:
+        description: 'Model to push to, like "alice/bunny-detector". Defaults to `image` in cog.yaml.'
+        required: false
+
+env:
+  COG_VERSION: v0.22.0
+
+# Never run two releases at once; a queued run waits for the current one.
+concurrency:
+  group: release-replicate
+  cancel-in-progress: false
+
+jobs:
+  push_to_replicate:
+    name: cog build + cog push
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Environment-scoped secrets are only exposed to jobs that declare the environment.
+    # This also records each push on the repo's Deployments page.
+    environment:
+      name: production
+      url: https://replicate.com/${{ inputs.model_name || 'darkvertex/laughtersegmentation' }}
+
+    steps:
+      - name: Check Replicate credentials
+        env:
+          REPLICATE_CLI_AUTH_TOKEN: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
+        run: |
+          if [ -z "$REPLICATE_CLI_AUTH_TOKEN" ]; then
+            echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is not available. Generate a token with 'cog login' or at https://replicate.com/account/api-tokens and add it to the 'production' GitHub Environment (Settings > Environments)."
+            exit 1
+          fi
+
+      # The image is ~10 GB (CUDA base + torch + 1.26 GB weights); reclaim space first.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          docker-images: false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Installs Docker buildx and Cog, and runs `cog login` with the token.
+      - name: Setup Cog
+        uses: replicate/setup-cog@v2
+        with:
+          token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
+          cog-version: ${{ env.COG_VERSION }}
+
+      - name: cog build
+        run: cog build
+
+      # `cog push` reuses the layers just built, so this only uploads.
+      - name: cog push
+        env:
+          MODEL_NAME: ${{ inputs.model_name }}
+        run: |
+          if [ -n "$MODEL_NAME" ]; then
+            cog push "r8.im/$MODEL_NAME"
+          else
+            cog push
+          fi

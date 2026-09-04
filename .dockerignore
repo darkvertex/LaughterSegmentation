@@ -18,3 +18,14 @@ __pycache__
 
 # Exclude Python virtual environment
 /venv
+/.venv
+
+# Weights are downloaded into the image by a `build.run` step in cog.yaml.
+# A local copy (or a dangling symlink) here would overwrite that layer via `COPY . /src`.
+models/*.safetensors
+
+# Evaluation data and reference models are not used by inference
+# (inference.py only imports evaluation/_utils).
+evaluation/models
+evaluation/datasets
+evaluation/cache

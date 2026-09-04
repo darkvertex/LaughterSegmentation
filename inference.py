@@ -110,10 +110,11 @@ def main(audio_path, output_dir, model_path, input_sec=7, batch_size=10, model=N
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if model is None:
-        model = Model(audio_model_name, device, sr).to(device)
-
         if not osp.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}. Download the model file and place it in the specified path.")
+
+        # The fine-tuned checkpoint contains every parameter, so skip the base-weight download.
+        model = Model(audio_model_name, device, sr, pretrained=False).to(device)
         state_dict = safetensors.torch.load_file(model_path, device.index if device.type=="cuda" else "cpu")
         # state_dict = torch.load(model_path) # use when model is .bin format
         model.load_state_dict(state_dict)

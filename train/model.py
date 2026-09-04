@@ -2,7 +2,7 @@ import librosa
 from scipy.signal import find_peaks
 import torch
 import torch.nn as nn
-from transformers import Wav2Vec2ForAudioFrameClassification
+from transformers import AutoConfig, Wav2Vec2ForAudioFrameClassification
 
 
 class DiceLoss(nn.Module):
@@ -28,7 +28,13 @@ class DiceLoss(nn.Module):
 
 
 class Model(torch.nn.Module):
-    def __init__(self, audio_model_name: str, device: str, sr: int):
+    def __init__(self, audio_model_name: str, device: str, sr: int, pretrained: bool = True):
+        """
+        pretrained=False builds the architecture from config.json only, skipping the
+        ~1.26 GB base checkpoint download. Use it when a fine-tuned state dict
+        covering every parameter is loaded right after (inference); training needs
+        the base weights and should keep the default.
+        """
         super().__init__()
         # These are needed for model parallel
         # self.is_parallelizable = True
@@ -38,7 +44,11 @@ class Model(torch.nn.Module):
         self.sr = sr
 
         if "wav2vec" in audio_model_name:
-            self.audio_model = Wav2Vec2ForAudioFrameClassification.from_pretrained(audio_model_name, num_labels=1, problem_type="single_label_classification").to(device)
+            if pretrained:
+                self.audio_model = Wav2Vec2ForAudioFrameClassification.from_pretrained(audio_model_name, num_labels=1, problem_type="single_label_classification").to(device)
+            else:
+                config = AutoConfig.from_pretrained(audio_model_name, num_labels=1, problem_type="single_label_classification")
+                self.audio_model = Wav2Vec2ForAudioFrameClassification(config).to(device)
         else:
             raise Exception(f"{audio_model_name} is not supported")
 

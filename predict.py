@@ -47,7 +47,8 @@ class Predictor(BasePredictor):
         self.default_output_dir = "/tmp/laughter-output"
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = Model(AUDIO_MODEL_NAME, device, SAMPLE_RATE).to(device)
+        # The fine-tuned checkpoint contains every parameter, so skip the base-weight download.
+        self.model = Model(AUDIO_MODEL_NAME, device, SAMPLE_RATE, pretrained=False).to(device)
         state_dict = safetensors.torch.load_file(
             self.default_model_path,
             device.index if device.type == "cuda" else "cpu",

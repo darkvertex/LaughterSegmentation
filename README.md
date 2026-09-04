@@ -35,17 +35,22 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
 ## Replicate (Cog)
 This repository includes a Cog wrapper for deploying on Replicate.
 
-1. Make sure `models/model.safetensors` exists (same as local usage).
-2. Install Cog CLI: https://cog.run/getting-started/
-3. Build and test locally:
+The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) into the image via the `build.run` steps in `cog.yaml`, so no weights need to be present locally and cold boots on Replicate do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
+
+1. Install Cog CLI: https://cog.run/getting-started/
+2. Build and test locally:
   ```Batchfile
   cog build
   cog predict -i audio=@./your_audio.wav
   ```
-4. Push to Replicate (after `replicate login`):
+3. Push to Replicate (after `replicate login`):
   ```Batchfile
   cog push r8.im/<your-username>/laughter-segmentation
   ```
+
+### GitHub Actions
+- `.github/workflows/cog-build.yml` runs on every pull request: `cog build`, then a CPU `cog predict` smoke test against the built image. Nothing is pushed.
+- `.github/workflows/cog-release.yml` runs on every push to `main` (or manually): `cog build` then `cog push`. It runs in the `production` GitHub Environment and needs the secret `REPLICATE_CLI_AUTH_TOKEN` defined there (Settings > Environments > production; create the token with `cog login` or at https://replicate.com/account/api-tokens). The job fails early with a clear message if it is missing.
 
 Inputs exposed by the predictor:
 - `audio`: input audio file.
