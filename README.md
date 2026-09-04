@@ -80,20 +80,52 @@ Tested on Windows 11 with GeForce RTX 2060 SUPER.
 5. Result will be saved in output directory in json format (`laughter` and `applause` timed ranges). To visualize the results, you can use [this site](https://omine-me.github.io/AudioDatasetChecker/compare.html) (not perfect because it's for debugging).
 
 ## Replicate (Cog)
-This repository includes a Cog wrapper for deploying on Replicate.
+This repository includes a Cog wrapper. The image currently published from this fork is [r8.im/darkvertex/laughtersegmentation](https://replicate.com/darkvertex/laughtersegmentation).
 
-The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) into the image via the `build.run` steps in `cog.yaml`, so no weights need to be present locally and cold boots on Replicate do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
+The image build downloads `model.safetensors` (and the base wav2vec2 `config.json`) via the `build.run` steps in `cog.yaml`, so cold boots do no network I/O. Any local `models/*.safetensors` is excluded from the build context by `.dockerignore`.
 
-1. Install Cog CLI: https://cog.run/getting-started/
-2. Build and test locally:
-  ```Batchfile
-  cog build
-  cog predict -i audio=@./your_audio.wav
-  ```
-3. Push to Replicate (after `replicate login`):
-  ```Batchfile
-  cog push r8.im/<your-username>/laughter-segmentation
-  ```
+Install the [Cog CLI](https://cog.run/getting-started/) and Docker. An NVIDIA GPU is recommended. Without a driver, Cog logs `Missing device driver, re-trying without GPU` and runs on CPU (much slower). The first pull or build is around 10 GB.
+
+### Run an estimate locally
+
+You do not need a Python venv or `model.safetensors` on disk. `cog predict` writes a JSON file (`-o`); omit `-o` to print the path Cog stored.
+
+**Published image** (no local `cog build`):
+
+```
+cog predict r8.im/darkvertex/laughtersegmentation -i audio=@./your_audio.wav -o ./laughter-applause.json
+```
+
+**Build from this checkout**, then predict with the image named in `cog.yaml`:
+
+```
+cog build
+cog predict -i audio=@./your_audio.wav -o ./laughter-applause.json
+```
+
+Optional inputs (same names as the Replicate API):
+
+```
+cog predict r8.im/darkvertex/laughtersegmentation -i audio=@./your_audio.wav -i input_sec=7 -i batch_size=10 -o ./laughter-applause.json
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `audio` | (required) | wav / mp3 / opus / etc. Prefix local files with `@`. |
+| `input_sec` | `7.0` | Sliding window length in seconds (`2.1`–`30`). |
+| `batch_size` | `10` | Windows per forward pass (`1`–`64`). |
+
+The JSON matches [What's special about this fork](#whats-special-about-this-fork).
+
+### Push your own build
+
+After `replicate login` (CLI auth token from https://replicate.com/auth/token, not an `r8_…` API token):
+
+```
+cog push r8.im/darkvertex/laughtersegmentation
+```
+
+Or another destination: `cog push r8.im/<your-username>/laughter-segmentation`.
 
 ### GitHub Actions
 - `.github/workflows/cog-build.yml` runs on every pull request: `pytest` and `cog build` + a CPU `cog predict` smoke test, in parallel. Nothing is pushed.
