@@ -71,7 +71,15 @@ jobs:
           with open("/tmp/output.json") as f:
               result = json.load(f)
           assert isinstance(result, dict), f"expected a JSON object, got {type(result).__name__}"
-          for seg in result.values():
-              assert {"start_sec", "end_sec"} <= seg.keys(), seg
-          print(f"OK: valid output with {len(result)} segment(s)")
+          assert set(result.keys()) == {"laughter", "applause"}, result.keys()
+          required = {"start_sec", "end_sec"}
+          total = 0
+          for kind in ("laughter", "applause"):
+              segments = result[kind]
+              assert isinstance(segments, dict), f"{kind} should be an object, got {type(segments).__name__}"
+              for key, seg in segments.items():
+                  assert isinstance(seg, dict), {kind: key, "seg": seg}
+                  assert required <= seg.keys(), {kind: key, "seg": seg}
+                  total += 1
+          print(f"OK: valid output with {total} segment(s) across laughter and applause")
           EOF
