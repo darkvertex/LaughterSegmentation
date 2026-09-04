@@ -1,0 +1,78 @@
+name: Cog build (validate)
+
+# Builds the Cog image exactly as the release workflow does, then runs one
+# CPU prediction against it to prove setup() works with the baked-in weights.
+# Nothing is pushed.
+
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+  workflow_dispatch:
+
+env:
+  COG_VERSION: v0.22.0
+  IMAGE_TAG: laughtersegmentation:ci
+
+jobs:
+  build:
+    name: cog build + smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # The image is ~10 GB (CUDA base + torch + 1.26 GB weights); reclaim space first.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          docker-images: false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Cog
+        uses: replicate/setup-cog@v2
+        with:
+          token: ""
+          cog-version: ${{ env.COG_VERSION }}
+
+      - name: cog build
+        run: cog build -t "$IMAGE_TAG"
+
+      - name: Report image size
+        run: |
+          docker image inspect "$IMAGE_TAG" --format 'Image size: {{ .Size }} bytes'
+
+      - name: Generate sample audio
+        run: |
+          python3 - <<'EOF'
+          import math, struct, wave
+          sr, seconds = 16000, 10
+          with wave.open("/tmp/sample.wav", "wb") as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+              # Amplitude-modulated tone so the input is not pure silence.
+              frames = (int(12000 * math.sin(2 * math.pi * 220 * t / sr) * (0.5 + 0.5 * math.sin(2 * math.pi * 4 * t / sr)))
+                        for t in range(sr * seconds))
+              w.writeframes(b"".join(struct.pack("<h", f) for f in frames))
+          print("wrote /tmp/sample.wav")
+          EOF
+
+      # No GPU on the runner: Cog logs "Missing device driver, re-trying without GPU"
+      # and the predictor falls back to CPU. This verifies the weights and base config
+      # are present in the image (setup() must not need the network).
+      - name: cog predict smoke test
+        run: cog predict "$IMAGE_TAG" -i audio=@/tmp/sample.wav -o /tmp/output.json
+
+      - name: Validate output
+        run: |
+          python3 - <<'EOF'
+          import json
+          with open("/tmp/output.json") as f:
+              result = json.load(f)
+          assert isinstance(result, dict), f"expected a JSON object, got {type(result).__name__}"
+          for seg in result.values():
+              assert {"start_sec", "end_sec"} <= seg.keys(), seg
+          print(f"OK: valid output with {len(result)} segment(s)")
+          EOF

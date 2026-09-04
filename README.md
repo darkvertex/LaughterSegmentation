@@ -48,6 +48,10 @@ The build downloads `model.safetensors` (and the base wav2vec2 `config.json`) in
   cog push r8.im/<your-username>/laughter-segmentation
   ```
 
+### GitHub Actions
+- `.github/workflows/cog-build.yml` runs on every pull request: `cog build`, then a CPU `cog predict` smoke test against the built image. Nothing is pushed.
+- `.github/workflows/cog-release.yml` runs on every push to `main` (or manually): `cog build` then `cog push`. It needs the repository secret `REPLICATE_CLI_AUTH_TOKEN` (create one with `cog login` or at https://replicate.com/account/api-tokens); the job fails early with a clear message if it is missing.
+
 Inputs exposed by the predictor:
 - `audio`: input audio file.
 - `input_sec` (default `7.0`): inference window size in seconds.
