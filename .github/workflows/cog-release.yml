@@ -2,9 +2,9 @@ name: Release to Replicate
 
 # Builds the Cog image and pushes it to Replicate whenever main changes.
 #
-# Requires the repository secret REPLICATE_CLI_AUTH_TOKEN. Create one with
-# `cog login` or at https://replicate.com/account/api-tokens and add it under
-# Settings > Secrets and variables > Actions.
+# Requires the secret REPLICATE_CLI_AUTH_TOKEN on the "production" GitHub
+# Environment (Settings > Environments > production). Create the token with
+# `cog login` or at https://replicate.com/account/api-tokens.
 
 on:
   push:
@@ -33,6 +33,11 @@ jobs:
     name: cog build + cog push
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Environment-scoped secrets are only exposed to jobs that declare the environment.
+    # This also records each push on the repo's Deployments page.
+    environment:
+      name: production
+      url: https://replicate.com/${{ inputs.model_name || 'darkvertex/laughtersegmentation' }}
 
     steps:
       - name: Check Replicate credentials
@@ -40,7 +45,7 @@ jobs:
           REPLICATE_CLI_AUTH_TOKEN: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
         run: |
           if [ -z "$REPLICATE_CLI_AUTH_TOKEN" ]; then
-            echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is not set. Generate a token with 'cog login' or at https://replicate.com/account/api-tokens and add it to the repository secrets."
+            echo "::error::Secret REPLICATE_CLI_AUTH_TOKEN is not available. Generate a token with 'cog login' or at https://replicate.com/account/api-tokens and add it to the 'production' GitHub Environment (Settings > Environments)."
             exit 1
           fi
 
