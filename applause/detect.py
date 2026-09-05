@@ -94,45 +94,50 @@ def extract_mfcc(audio: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
 
 
 def _merge_short_sounds(predictions: np.ndarray, threshold_ms: int) -> np.ndarray:
-    """Port of AMP smoothing.merge_short_sounds.
+    """Join interrupted applause, then remove applause shorter than the threshold.
 
-    Short runs are rewritten to the previous long-enough label. The AMP source
-    used `if not previous_value`, which treats class 0 (applause) as missing;
-    this port uses `is None` so the first long segment is tracked correctly.
+    AMP rewrites every short run to the previous long run. That one-sided rule
+    loses applause made of individually short classifier bursts. For the binary
+    model, only bridge non-applause gaps bounded by applause. Each bridge must
+    be shorter than half the minimum event length, and a retained event must
+    span the full minimum while containing at least half a minimum event of
+    direct classifier evidence.
     """
     if threshold_ms <= 0 or len(predictions) == 0:
         return np.asarray(predictions, dtype=np.int32)
 
-    min_n_frames = round(threshold_ms / FRAME_SIZE_MS)
-    merged: list[int] = []
-    previous_value: int | None = None
-    current_seg_start = 0
-    preds = np.asarray(predictions)
+    min_n_frames = max(1, round(threshold_ms / FRAME_SIZE_MS))
+    max_gap_n_frames = max(1, min_n_frames // 2)
+    min_evidence_n_frames = max(1, min_n_frames // 2)
+    raw = np.asarray(predictions, dtype=np.int32)
+    smoothed = raw.copy()
 
-    while current_seg_start < len(preds):
-        current_value = int(preds[current_seg_start])
-        find_next = np.where(preds[current_seg_start:] != current_value)[0]
-        if find_next.size == 0:
-            next_different = len(preds)
-            current_seg_len = len(preds) - current_seg_start
-        else:
-            current_seg_len = int(find_next[0])
-            next_different = current_seg_len + current_seg_start
+    change_points = np.flatnonzero(np.diff(smoothed) != 0) + 1
+    starts = np.concatenate(([0], change_points))
+    ends = np.concatenate((change_points, [len(smoothed)]))
+    for run_index, (start, end) in enumerate(zip(starts, ends, strict=True)):
+        if (
+            smoothed[start] != APPLAUSE_CLASS
+            and end - start < max_gap_n_frames
+            and run_index > 0
+            and run_index + 1 < len(starts)
+            and smoothed[starts[run_index - 1]] == APPLAUSE_CLASS
+            and smoothed[starts[run_index + 1]] == APPLAUSE_CLASS
+        ):
+            smoothed[start:end] = APPLAUSE_CLASS
 
-        if current_seg_len >= min_n_frames:
-            segment = preds[current_seg_start:next_different]
-            previous_value = current_value
-            merged.extend(int(value) for value in segment)
-        elif previous_value is None:
-            # Keep frames so later timestamps stay aligned with the audio.
-            # AMP omitted leading shorts from the output list; we still drop
-            # them later by duration when converting to applause ranges.
-            merged.extend(int(value) for value in preds[current_seg_start:next_different])
-        else:
-            merged.extend([previous_value] * current_seg_len)
-        current_seg_start = next_different
+    change_points = np.flatnonzero(np.diff(smoothed) != 0) + 1
+    starts = np.concatenate(([0], change_points))
+    ends = np.concatenate((change_points, [len(smoothed)]))
+    for start, end in zip(starts, ends, strict=True):
+        if smoothed[start] == APPLAUSE_CLASS and (
+            end - start < min_n_frames
+            or np.count_nonzero(raw[start:end] == APPLAUSE_CLASS)
+            < min_evidence_n_frames
+        ):
+            smoothed[start:end] = 1
 
-    return np.asarray(merged, dtype=np.int32)
+    return smoothed
 
 
 def _num_to_label(class_index: int, binary: bool) -> str:

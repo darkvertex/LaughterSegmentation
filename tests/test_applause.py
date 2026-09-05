@@ -78,6 +78,73 @@ def test_smooth_merges_short_gap_after_applause():
     assert applause_rows[0]["end"] == pytest.approx(2.59)
 
 
+def test_smooth_joins_fragmented_exact_men_clapping_sample_pattern():
+    # Exact run-length encoding of the classifier output for men_clapping.mp3
+    # (http://tmpfiles.comedyonmackay.com/shared/men_clapping.mp3): 1,247
+    # 10 ms frames, 391 applause frames in 38 runs, and no applause run longer
+    # than 340 ms. Keeping the encoded output avoids a network/audio fixture.
+    run_lengths = np.fromstring(
+        "118,14,6,2,4,1,114,14,92,7,10,3,20,9,8,1,7,3,31,8,"
+        "9,8,68,34,4,2,30,27,7,7,34,33,39,2,6,24,6,7,22,2,"
+        "9,28,4,7,3,8,16,7,4,9,10,1,20,8,23,14,31,1,14,1,"
+        "3,21,4,18,5,12,28,2,2,9,8,2,26,33,5,2,6",
+        dtype=np.int32,
+        sep=",",
+    )
+    runs = [
+        (1 - index % 2, int(length))
+        for index, length in enumerate(run_lengths)
+    ]
+    predictions = np.concatenate(
+        [np.full(length, label, dtype=np.int32) for label, length in runs]
+    )
+
+    assert len(runs) == 77
+    assert len(predictions) == 1247
+    assert np.count_nonzero(predictions == 0) == 391
+    assert sum(label == 0 for label, _ in runs) == 38
+    assert max(length for label, length in runs if label == 0) == 34
+
+    grouped = smooth_predictions(predictions, min_segment_ms=1000, binary=True)
+    applause_rows = [row for row in grouped if row["label"] == "applause"]
+
+    assert applause_rows == [
+        {
+            "label": "applause",
+            "start": pytest.approx(5.57),
+            "end": pytest.approx(12.4),
+        }
+    ]
+
+
+def test_smooth_does_not_promote_sparse_applause_hits():
+    # Synthetic false-positive guard: bridging spans over one second, but only
+    # 320 ms of the span is direct applause evidence.
+    predictions = np.concatenate(
+        [
+            np.ones(73, dtype=np.int32),
+            np.zeros(3, dtype=np.int32),
+            np.ones(21, dtype=np.int32),
+            np.zeros(1, dtype=np.int32),
+            np.ones(3, dtype=np.int32),
+            np.zeros(3, dtype=np.int32),
+            np.ones(26, dtype=np.int32),
+            np.zeros(3, dtype=np.int32),
+            np.ones(30, dtype=np.int32),
+            np.zeros(1, dtype=np.int32),
+            np.ones(13, dtype=np.int32),
+            np.zeros(18, dtype=np.int32),
+            np.ones(11, dtype=np.int32),
+            np.zeros(3, dtype=np.int32),
+            np.ones(92, dtype=np.int32),
+        ]
+    )
+
+    grouped = smooth_predictions(predictions, min_segment_ms=1000, binary=True)
+
+    assert all(row["label"] == "non-applause" for row in grouped)
+
+
 def test_smooth_drops_short_applause_after_long_non_applause():
     predictions = np.concatenate(
         [
