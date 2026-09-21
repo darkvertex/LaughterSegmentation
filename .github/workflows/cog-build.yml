@@ -102,7 +102,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8.0.0" "numpy>=1.26.3" "librosa>=0.10.1" "scipy>=1.10.0" "soundfile>=0.12.1"
+          python -m pip install "pytest>=8.0.0" "numpy>=1.26.3" "librosa>=0.10.1" "scipy>=1.10.0" "soundfile>=0.12.1" "pedalboard>=0.8.6"
 
       - name: pytest
         run: python -m pytest -q
