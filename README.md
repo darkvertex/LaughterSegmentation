@@ -117,6 +117,48 @@ cog predict r8.im/darkvertex/laughtersegmentation -i audio=@./your_audio.wav -i 
 
 The JSON matches [What's special about this fork](#whats-special-about-this-fork).
 
+### Level laughter after analysis
+
+A second mode takes the JSON from the first run plus the original audio and returns **processed audio** (not JSON). Segmentation is skipped. Use this to lift laughs just before they hit, even their level, and brickwall peaks.
+
+```
+python laughter_levels.py --audio ./your_audio.wav --markers ./laughter-applause.json --output ./leveled.wav
+```
+
+Or via Cog / Replicate (provide `markers` **or** `markers_json`, not both):
+
+```
+cog predict r8.im/darkvertex/laughtersegmentation \
+  -i audio=@./your_audio.wav \
+  -i markers=@./laughter-applause.json \
+  -o ./leveled.wav
+```
+
+Processing uses the file’s native sample rate and channel count (typically stereo 48 kHz masters). Nearby laughs closer than 0.2 s are merged. Empty `laughter: {}` still runs the limiter. Applause ranges are ignored unless `process_applause=true`.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `markers` | (unset) | Analysis JSON file (`laughter` / `applause` maps). Selects process mode. |
+| `markers_json` | (empty) | Same JSON as an inline string. |
+| `process_applause` | `false` | Also level applause ranges. |
+| `output_format` | `wav` | `wav`, `flac`, or `mp3`. |
+| `pre_lift_db` | `1.5` | Subtle gain (dB) just before each laugh onset. |
+| `pre_lift_ms` | `280` | How far before onset the lift starts (ms). |
+| `pre_lift_attack_ms` | `100` | Cosine ramp into/out of the lift (ms). |
+| `comp_threshold_db` | `-22` | Laughter compressor threshold (dB). |
+| `comp_ratio` | `2.5` | Laughter compressor ratio. |
+| `comp_attack_ms` | `10` | Compressor attack (ms). |
+| `comp_release_ms` | `200` | Compressor release (ms). |
+| `norm_target_rms_db` | `-18` | Target RMS (dBFS) per laugh window. |
+| `norm_max_gain_db` | `6` | Max makeup when matching RMS (dB). |
+| `norm_max_cut_db` | `12` | Max cut when matching RMS (dB). |
+| `norm_attack_ms` | `50` | Normalizer ramp-in (ms). |
+| `norm_release_ms` | `250` | Normalizer ramp-out (ms). |
+| `limiter_ceiling_db` | `-1.0` | Full-file limiter ceiling (dBFS). |
+| `limiter_release_ms` | `80` | Limiter release (ms). |
+
+Chain: pre-lift envelope → linked-stereo compressor dry/wet with a laughter mask → per-laugh RMS normalize (clamped) → full-file limiter.
+
 ### Push your own build
 
 After `replicate login` (CLI auth token from https://replicate.com/auth/token, not an `r8_…` API token):
@@ -135,8 +177,7 @@ Inputs exposed by the predictor:
 - `audio`: input audio file.
 - `input_sec` (default `7.0`): inference window size in seconds.
 - `batch_size` (default `10`): number of windows per forward pass.
-
-Output: a JSON file in the format documented under [What's special about this fork](#whats-special-about-this-fork).
+- Optional markers + levels knobs documented under [Level laughter after analysis](#level-laughter-after-analysis). When `markers` or `markers_json` is set, the output is processed audio instead of JSON.
 
 ## Training
 Read [README](/train/README.md) in train directory.
