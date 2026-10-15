@@ -1,0 +1,2 @@
+-r replicate-requirements.txt
+runpod==1.12.0
