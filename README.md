@@ -16,6 +16,8 @@ This fork of [omine-me/LaughterSegmentation](https://github.com/omine-me/Laughte
 
 **Hosted Replicate model.** A Cog image is published at [replicate.com/darkvertex/laughtersegmentation](https://replicate.com/darkvertex/laughtersegmentation). Local `cog predict` and that hosted model return the same JSON file.
 
+**Runpod Serverless.** The same segmenter runs as a queue worker (`handler.py` and the root `Dockerfile`). `cog.yaml` and the Replicate inputs are unchanged. See [Runpod Serverless](#runpod-serverless).
+
 **JSON output on success.** The result is one object with `laughter` and `applause` maps. Keys are string indices in time order (`"0"`, `"1"`, …). A kind with no detections is `{}`. Each segment looks like:
 
 ```json
@@ -137,6 +139,63 @@ Inputs exposed by the predictor:
 - `batch_size` (default `10`): number of windows per forward pass.
 
 Output: a JSON file in the format documented under [What's special about this fork](#whats-special-about-this-fork).
+
+## Runpod Serverless
+
+A queue worker in `handler.py` runs the same segmentation as the Cog predictor. Build it with the root `Dockerfile` (Runpod does not read `cog.yaml`, and `cog build` does not read the Dockerfile). The image bakes `model.safetensors` and the wav2vec2 config, and its start command is `python -u handler.py`.
+
+The worker loads the model once, before it accepts jobs. On success, Runpod's job `output` is the JSON object from [What's special about this fork](#whats-special-about-this-fork), not a file path. Invalid input and download failures return `{"error": "..."}`, which the Runpod SDK reports as a failed job.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `audio` | (required unless `audio_base64` is set) | `http`/`https` URL, or a base64 `data:` URI. Long recordings should be URLs: Runpod's `/run` body limit is 10 MB. |
+| `audio_base64` |  | Raw base64 audio when you do not have a URL. Do not send both `audio` and `audio_base64`. |
+| `filename` | `audio.wav` | Used only with `audio_base64`, to pick the file extension. |
+| `input_sec` | `7.0` | Sliding window length in seconds (`2.1`–`30`). |
+| `batch_size` | `10` | Windows per forward pass (`1`–`64`). |
+
+```json
+{
+  "input": {
+    "audio": "https://example.com/show.wav",
+    "input_sec": 7,
+    "batch_size": 10
+  }
+}
+```
+
+### Build and deploy
+
+From this checkout, with Docker (linux/amd64):
+
+```
+docker build -t laughter-segmentation:runpod .
+docker push <registry>/laughter-segmentation:runpod
+```
+
+In the Runpod console, create a **Queue** endpoint from that image and select an NVIDIA GPU. A 16 GB card is a comfortable start for this checkpoint. Leave the container start command as the image default.
+
+There is no `test_input.json` in the image. If that file is next to `handler.py` outside Runpod, the SDK runs one job and exits instead of serving. For a local `docker run`, create that file with the JSON object above and mount it at `/src/test_input.json`.
+
+### Local handler check
+
+Install `runpod` plus the inference dependencies, then pass one job on the command line. This loads the real checkpoint:
+
+```
+python handler.py --test_input '{"input": {"audio": "https://example.com/show.wav"}}'
+```
+
+A local API that speaks the same `/runsync` route:
+
+```
+python handler.py --rp_serve_api --rp_api_host 0.0.0.0
+```
+
+To exercise the image itself, `docker run --rm --gpus all` needs a `test_input.json` mounted in, because the image does not contain one:
+
+```
+docker run --rm --gpus all -v "$PWD/test_input.json:/src/test_input.json" laughter-segmentation:runpod
+```
 
 ## Training
 Read [README](/train/README.md) in train directory.
